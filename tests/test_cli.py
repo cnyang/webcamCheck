@@ -11,6 +11,8 @@ def test_run_defaults() -> None:
     assert args.sustain == 8.0
     assert args.cooldown == 120.0
     assert args.facing_ratio == 0.7
+    assert args.near_ratio == 1.12
+    assert args.no_check_distance is False, "距離偵測預設開啟"
     assert args.check_tilt is False, "肩膀傾斜偵測預設要關閉,避免轉身誤報"
     assert args.func.__name__ == "_cmd_run"
 
@@ -73,3 +75,33 @@ def test_run_accepts_overrides() -> None:
     assert args.sustain == 10.0
     assert args.cooldown == 30.0
     assert args.facing_ratio == 0.55
+
+
+def test_near_ratio_can_be_overridden() -> None:
+    args = build_parser().parse_args(["run", "--near-ratio", "1.2"])
+    assert args.near_ratio == 1.2
+
+
+def test_distance_check_can_be_disabled() -> None:
+    assert build_parser().parse_args(["run", "--no-check-distance"]).no_check_distance is True
+
+
+def test_debug_has_distance_args() -> None:
+    args = build_parser().parse_args(["debug"])
+    assert args.near_ratio == 1.12
+
+
+def test_menubar_program_args_carry_distance_settings() -> None:
+    from webcamcheck.cli import menubar_program_args
+
+    args = build_parser().parse_args(["install-startup", "--near-ratio", "1.2"])
+    command = menubar_program_args(args)
+    assert "--near-ratio" in command
+    assert command[command.index("--near-ratio") + 1] == "1.2"
+
+
+def test_menubar_program_args_carry_distance_opt_out() -> None:
+    from webcamcheck.cli import menubar_program_args
+
+    args = build_parser().parse_args(["install-startup", "--no-check-distance"])
+    assert "--no-check-distance" in menubar_program_args(args)

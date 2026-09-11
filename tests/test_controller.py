@@ -15,6 +15,7 @@ BASELINE = Baseline(neck_angle_deg=10.0, shoulder_tilt_deg=2.0, shoulder_width=0
 GOOD = PostureSample(neck_angle_deg=10.0, shoulder_tilt_deg=2.0, shoulder_width=0.50)
 SLOUCH = PostureSample(neck_angle_deg=30.0, shoulder_tilt_deg=2.0, shoulder_width=0.50)
 TURNED = PostureSample(neck_angle_deg=60.0, shoulder_tilt_deg=2.0, shoulder_width=0.20)
+TOO_CLOSE = PostureSample(neck_angle_deg=10.0, shoulder_tilt_deg=2.0, shoulder_width=0.575)
 FRAME = np.zeros((1, 1, 3), dtype=np.uint8)
 
 SETTINGS = MenuBarSettings(sustain_seconds=5.0, cooldown_seconds=60.0, calibrate_seconds=1.0)
@@ -348,6 +349,29 @@ class TestTuning:
     def test_without_saved_tuning_startup_flags_apply(self) -> None:
         h, _ = self._harness_with_tuning(None)
         assert h.controller.settings.sustain_seconds == 5.0
+
+    def test_near_ratio_setter_persists(self) -> None:
+        h, saved = self._harness_with_tuning(None)
+        h.controller.set_near_ratio(1.2)
+        assert h.controller.settings.near_ratio == 1.2
+        assert saved[-1].near_ratio == 1.2
+
+    def test_saved_near_ratio_wins_over_startup_flags(self) -> None:
+        tuning = config.Tuning(neck_tolerance_deg=12.0, sustain_seconds=30.0, facing_ratio=0.55, near_ratio=1.2)
+        h, _ = self._harness_with_tuning(tuning)
+        assert h.controller.settings.near_ratio == 1.2
+
+    def test_too_close_is_detected_in_tick(self) -> None:
+        h, _ = self._harness_with_tuning(None)
+        h.sample = TOO_CLOSE
+        assert h.tick_at(0.0) is PostureStatus.BAD
+
+    def test_loosening_near_ratio_takes_effect_immediately(self) -> None:
+        h, _ = self._harness_with_tuning(None)
+        h.sample = TOO_CLOSE
+        assert h.tick_at(0.0) is PostureStatus.BAD
+        h.controller.set_near_ratio(1.5)
+        assert h.tick_at(2.0) is PostureStatus.GOOD
 
     def test_setters_persist(self) -> None:
         h, saved = self._harness_with_tuning(None)

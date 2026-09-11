@@ -38,6 +38,8 @@ class MenuBarSettings:
     tilt_tolerance_deg: float = 15.0
     facing_ratio: float = 0.7
     check_tilt: bool = False
+    near_ratio: float = config.DEFAULT_NEAR_RATIO
+    check_distance: bool = True
     interval_seconds: float = 2.0
     sustain_seconds: float = 8.0
     cooldown_seconds: float = 120.0
@@ -91,6 +93,7 @@ class MenuBarController:
             self.settings.neck_tolerance_deg = tuning.neck_tolerance_deg
             self.settings.sustain_seconds = tuning.sustain_seconds
             self.settings.facing_ratio = tuning.facing_ratio
+            self.settings.near_ratio = tuning.near_ratio
 
         self._monitor_state = PostureMonitorState()
         self._camera: CameraHandle | None = None
@@ -120,6 +123,10 @@ class MenuBarController:
         self.settings.facing_ratio = ratio
         self._tuning_changed()
 
+    def set_near_ratio(self, ratio: float) -> None:
+        self.settings.near_ratio = ratio
+        self._tuning_changed()
+
     def _tuning_changed(self) -> None:
         """標準一改就把計時歸零:否則放寬門檻的瞬間,之前累積的秒數會立刻觸發一次通知。"""
         self._monitor_state = PostureMonitorState()
@@ -128,6 +135,7 @@ class MenuBarController:
                 neck_tolerance_deg=self.settings.neck_tolerance_deg,
                 sustain_seconds=self.settings.sustain_seconds,
                 facing_ratio=self.settings.facing_ratio,
+                near_ratio=self.settings.near_ratio,
             )
         )
 
@@ -192,6 +200,8 @@ class MenuBarController:
             now=self._now(),
             facing_ratio=self.settings.facing_ratio,
             check_tilt=self.settings.check_tilt,
+            near_ratio=self.settings.near_ratio,
+            check_distance=self.settings.check_distance,
             notify_fn=self._notify,
         )
         self.ui.status = verdict.status

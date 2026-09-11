@@ -51,6 +51,12 @@ def angle_at_vertex(vertex: Point, first: Point, second: Point, aspect_ratio: fl
 
 
 def shoulder_width(left_shoulder: Point, right_shoulder: Point, aspect_ratio: float = 1.0) -> float:
-    """兩肩在畫面上的水平距離。轉身面向側邊時,兩肩投影會被壓扁,這個值會明顯變小,
-    用來判斷「人有沒有正對鏡頭」。低頭駝背不會讓它變小,所以不會把該提醒的姿勢誤放過。"""
+    """兩肩在畫面上的水平距離。同一個值撐兩個判定,因為兩種情況讓它往相反方向動:
+
+    - **轉身**面向側邊時兩肩投影被壓扁,這個值明顯變小(實測轉身約基準的 27%)。
+    - **上身前傾**時肩膀靠近鏡頭,這個值變大(實測正常 99~107%、前傾 109~117%)。
+
+    量距離刻意不用兩耳距離:實測前傾時它反而從 104% 掉到 79~92%,駝背時在 76~125% 之間亂跳。
+    BlazePose 的耳朵點在近距離或頭有俯仰角時會塌向臉中心,方向是錯的。
+    """
     return abs(left_shoulder.x - right_shoulder.x) * aspect_ratio

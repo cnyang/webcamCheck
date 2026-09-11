@@ -59,3 +59,11 @@ class TestShoulderWidth:
         facing = shoulder_width(Point(0.25, 0.5), Point(0.75, 0.5))
         turned = shoulder_width(Point(0.45, 0.5), Point(0.60, 0.5))
         assert turned < facing
+
+
+class TestShoulderWidthAsDistance:
+    def test_grows_when_torso_leans_in(self) -> None:
+        # 實測:上身前傾時肩寬從基準的 100% 漲到 113~117%
+        upright = shoulder_width(Point(0.40, 0.6), Point(0.60, 0.6))
+        leaning = shoulder_width(Point(0.37, 0.6), Point(0.63, 0.6))
+        assert leaning > upright

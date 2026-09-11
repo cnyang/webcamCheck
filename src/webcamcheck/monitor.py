@@ -25,6 +25,8 @@ def evaluate(
     tilt_tolerance_deg: float,
     facing_ratio: float,
     check_tilt: bool,
+    near_ratio: float,
+    check_distance: bool,
 ) -> Verdict:
     """拍一幀並判斷這一刻的姿勢。拍不到影格或偵測不到人(離開座位)一律回 UNKNOWN,
     絕對不能直接 return 不理它,否則狀態機不知道中斷過,回座後會被舊的計時立刻觸發通知。"""
@@ -41,6 +43,8 @@ def evaluate(
         tilt_tolerance_deg=tilt_tolerance_deg,
         facing_ratio=facing_ratio,
         check_tilt=check_tilt,
+        near_ratio=near_ratio,
+        check_distance=check_distance,
     )
 
 
@@ -56,6 +60,8 @@ def check_once(
     now: float,
     facing_ratio: float,
     check_tilt: bool = False,
+    near_ratio: float = 1.2,
+    check_distance: bool = True,
     notify_fn: Callable[[str, str], None] = notify,
 ) -> Verdict:
     """跑一次「拍一幀 -> 判斷 -> 節流通知」,抽出來是為了能在測試裡直接呼叫,不用真的等待或開鏡頭。"""
@@ -67,6 +73,8 @@ def check_once(
         tilt_tolerance_deg=tilt_tolerance_deg,
         facing_ratio=facing_ratio,
         check_tilt=check_tilt,
+        near_ratio=near_ratio,
+        check_distance=check_distance,
     )
     should_notify = state.update(
         status=verdict.status,
@@ -80,11 +88,17 @@ def check_once(
 
 
 def _reason(verdict: Verdict) -> str:
-    if verdict.forward_slouch and verdict.side_lean:
-        return "頭往前垂、肩膀也歪了"
-    if verdict.forward_slouch:
-        return "頭往前垂了"
-    return "肩膀歪了"
+    """把所有成立的問題串成一句話。同時駝背又坐太近時,只講其中一個會讓人改了還是一直被提醒。"""
+    problems = [
+        text
+        for flagged, text in (
+            (verdict.forward_slouch, "頭往前垂"),
+            (verdict.side_lean, "肩膀歪掉"),
+            (verdict.too_close, "離螢幕太近"),
+        )
+        if flagged
+    ]
+    return "、".join(problems) + "了"
 
 
 def run(
@@ -97,6 +111,8 @@ def run(
     cooldown_seconds: float = 120.0,
     facing_ratio: float = 0.7,
     check_tilt: bool = False,
+    near_ratio: float = 1.2,
+    check_distance: bool = True,
     sound_name: str | None = DEFAULT_SOUND,
 ) -> None:
     state = PostureMonitorState()
@@ -118,6 +134,8 @@ def run(
                     now=time.monotonic(),
                     facing_ratio=facing_ratio,
                     check_tilt=check_tilt,
+                    near_ratio=near_ratio,
+                    check_distance=check_distance,
                     notify_fn=notify_fn,
                 )
                 time.sleep(check_interval_seconds)

@@ -19,10 +19,16 @@ logger = logging.getLogger(__name__)
 DEFAULT_NECK_TOLERANCE = 8.0
 DEFAULT_TILT_TOLERANCE = 15.0
 DEFAULT_FACING_RATIO = 0.7
+# 實測:正常坐著肩寬在基準的 99~107%,上身前傾是 109~117%。
+DEFAULT_NEAR_RATIO = config.DEFAULT_NEAR_RATIO
 
 
 def _sound_name(args: argparse.Namespace) -> str | None:
     return None if args.no_sound else args.sound
+
+
+def _check_distance(args: argparse.Namespace) -> bool:
+    return not args.no_check_distance
 
 
 def _open_camera(args: argparse.Namespace) -> Camera:
@@ -51,6 +57,7 @@ def _cmd_calibrate(args: argparse.Namespace) -> None:
     config.save_baseline(baseline)
     print(f"校準完成:neck={baseline.neck_angle_deg:.1f}° tilt={baseline.shoulder_tilt_deg:.1f}°")
     print(f"肩寬基準={baseline.shoulder_width:.3f}(轉身時肩寬會變小,用來判斷你是不是轉去用另一台電腦)")
+    print("同一個肩寬也用來判斷距離:上身往前傾時肩膀靠近鏡頭,肩寬會變大。")
     print(f"已存到 {config.CONFIG_PATH}")
 
 
@@ -73,6 +80,8 @@ def _cmd_run(args: argparse.Namespace) -> None:
         cooldown_seconds=args.cooldown,
         facing_ratio=args.facing_ratio,
         check_tilt=args.check_tilt,
+        near_ratio=args.near_ratio,
+        check_distance=_check_distance(args),
         sound_name=_sound_name(args),
     )
 
@@ -82,7 +91,7 @@ def _cmd_debug(args: argparse.Namespace) -> None:
     baseline = _require_baseline()
     label = {PostureStatus.GOOD: "良好", PostureStatus.BAD: "歪掉", PostureStatus.UNKNOWN: "不判斷"}
     print(f"基準:neck={baseline.neck_angle_deg:.1f}°  肩寬={baseline.shoulder_width:.3f}")
-    print("轉去用另一台電腦、離開座位、故意駝背各試幾秒,看下面數字怎麼變。Ctrl+C 結束。\n")
+    print("轉去用另一台電腦、離開座位、故意駝背、上身往前傾各試幾秒,看下面數字怎麼變。Ctrl+C 結束。\n")
     with _open_camera(args) as camera:
         estimator = PoseEstimator()
         try:
@@ -100,13 +109,15 @@ def _cmd_debug(args: argparse.Namespace) -> None:
                         tilt_tolerance_deg=args.tilt_tolerance,
                         facing_ratio=args.facing_ratio,
                         check_tilt=args.check_tilt,
+                        near_ratio=args.near_ratio,
+                        check_distance=_check_distance(args),
                     )
                     ratio = sample.shoulder_width / baseline.shoulder_width
                     print(
                         f"neck={sample.neck_angle_deg:6.1f}°  "
                         f"tilt={sample.shoulder_tilt_deg:6.1f}°  "
                         f"肩寬={sample.shoulder_width:.3f}(基準的 {ratio:4.0%})  "
-                        f"-> {label[verdict.status]}",
+                        f"-> {label[verdict.status]}{'(太近)' if verdict.too_close else ''}",
                         flush=True,
                     )
                 time.sleep(args.interval)
@@ -145,6 +156,8 @@ def _cmd_view(args: argparse.Namespace) -> None:
                             tilt_tolerance_deg=args.tilt_tolerance,
                             facing_ratio=args.facing_ratio,
                             check_tilt=args.check_tilt,
+                            near_ratio=args.near_ratio,
+                            check_distance=_check_distance(args),
                         )
                     )
                 canvas = overlay.draw_posture(frame, landmarks, sample, verdict, baseline)
@@ -166,6 +179,8 @@ def _menubar_settings(args: argparse.Namespace) -> controller.MenuBarSettings:
         tilt_tolerance_deg=args.tilt_tolerance,
         facing_ratio=args.facing_ratio,
         check_tilt=args.check_tilt,
+        near_ratio=args.near_ratio,
+        check_distance=_check_distance(args),
         interval_seconds=args.interval,
         sustain_seconds=args.sustain,
         cooldown_seconds=args.cooldown,
@@ -187,6 +202,8 @@ def menubar_program_args(args: argparse.Namespace) -> list[str]:
         str(args.neck_tolerance),
         "--facing-ratio",
         str(args.facing_ratio),
+        "--near-ratio",
+        str(args.near_ratio),
         "--interval",
         str(args.interval),
         "--sustain",
@@ -196,6 +213,8 @@ def menubar_program_args(args: argparse.Namespace) -> list[str]:
     ]
     if args.check_tilt:
         command.append("--check-tilt")
+    if args.no_check_distance:
+        command.append("--no-check-distance")
     if args.no_sound:
         command.append("--no-sound")
     else:
@@ -256,6 +275,17 @@ def _add_detection_args(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=DEFAULT_FACING_RATIO,
         help=f"肩寬掉到基準的幾成以下就當作你轉身了,不判斷姿勢(預設 {DEFAULT_FACING_RATIO})",
+    )
+    parser.add_argument(
+        "--near-ratio",
+        type=float,
+        default=DEFAULT_NEAR_RATIO,
+        help=f"肩寬超過校準值的幾倍算上身前傾坐太近,越小越嚴格(預設 {DEFAULT_NEAR_RATIO})",
+    )
+    parser.add_argument(
+        "--no-check-distance",
+        action="store_true",
+        help="關掉「離螢幕太近」偵測,只看姿勢角度",
     )
     parser.add_argument("--interval", type=float, default=2.0, help="每幾秒偵測一次(預設 2)")
 

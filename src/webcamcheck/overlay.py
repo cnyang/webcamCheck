@@ -135,7 +135,10 @@ def _draw_readout(
         ratio = sample.shoulder_width / baseline.shoulder_width
         lines.append(f"neck {sample.neck_angle_deg:5.1f}deg  (base {baseline.neck_angle_deg:.1f}, {delta:+.1f})")
         lines.append(f"shoulder tilt {sample.shoulder_tilt_deg:5.1f}deg")
-        lines.append(f"facing {ratio:.0%} of calibrated shoulder width")
+        # 同一個比例兩個意思:掉太多 = 轉身,漲太多 = 上身前傾靠太近
+        lines.append(f"shoulder width {ratio:.0%} of calibrated")
+        if verdict.too_close:
+            lines.append("TOO CLOSE - sit back")
         if not _elbows_visible(landmarks):
             # 坐太近時手肘會掉出取景範圍,講清楚是取景問題,不是偵測壞掉
             lines.append("elbows out of frame - sit back or tilt camera down")

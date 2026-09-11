@@ -45,6 +45,8 @@ RESUME_LABEL = "繼續監控"
 NECK_PRESETS = [("嚴格(5°)", 5.0), ("標準(8°)", 8.0), ("寬鬆(12°)", 12.0), ("很寬鬆(16°)", 16.0)]
 SUSTAIN_PRESETS = [("3 秒", 3.0), ("5 秒", 5.0), ("8 秒", 8.0), ("15 秒", 15.0), ("30 秒", 30.0)]
 FACING_PRESETS = [("嚴格(80%)", 0.8), ("標準(70%)", 0.7), ("寬鬆(55%)", 0.55)]
+# 實測:正常坐著肩寬在基準的 99~107%,上身前傾是 109~117%。
+NEAR_PRESETS = [("嚴格(肩寬 108%)", 1.08), ("標準(肩寬 112%)", 1.12), ("寬鬆(肩寬 120%)", 1.2)]
 
 
 def title_for(state: UiState) -> str:
@@ -76,7 +78,9 @@ def view_command(settings: MenuBarSettings) -> list[str]:
     command = [sys.executable, "-m", "webcamcheck", "view", "--camera-name", settings.camera_name]
     if settings.camera_id is not None:
         command += ["--camera-id", settings.camera_id]
-    command += ["--facing-ratio", str(settings.facing_ratio)]
+    command += ["--facing-ratio", str(settings.facing_ratio), "--near-ratio", str(settings.near_ratio)]
+    if not settings.check_distance:
+        command.append("--no-check-distance")
     return command
 
 
@@ -100,6 +104,10 @@ class PostureApp(rumps.App):  # type: ignore[misc]  # rumps 沒有型別標註,s
             "轉身判定", FACING_PRESETS, lambda: controller.settings.facing_ratio, controller.set_facing_ratio
         )
 
+        self._near_items = self._preset_menu(
+            "距離判定", NEAR_PRESETS, lambda: controller.settings.near_ratio, controller.set_near_ratio
+        )
+
         self.menu = [
             self._detail_item,
             None,
@@ -110,6 +118,7 @@ class PostureApp(rumps.App):  # type: ignore[misc]  # rumps 沒有型別標註,s
             self._neck_items,
             self._sustain_items,
             self._facing_items,
+            self._near_items,
             None,
             rumps.MenuItem("結束", callback=self._quit),
         ]

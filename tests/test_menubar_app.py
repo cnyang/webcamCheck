@@ -49,6 +49,10 @@ class _StubController:
         self.settings.facing_ratio = ratio
         self.applied.append(("facing", ratio))
 
+    def set_near_ratio(self, ratio: float) -> None:
+        self.settings.near_ratio = ratio
+        self.applied.append(("near", ratio))
+
     def tick(self) -> UiState:
         self.ticks += 1
         return self.ui
@@ -193,6 +197,14 @@ class TestViewCommand:
     def test_omits_id_when_using_the_name(self) -> None:
         assert "--camera-id" not in view_command(MenuBarSettings(camera_id=None))
 
+    def test_view_command_carries_distance_settings(self) -> None:
+        # 即時畫面要用和監控一樣的門檻,否則看到的判定和選單列不一致
+        command = view_command(MenuBarSettings(near_ratio=1.2))
+        assert command[command.index("--near-ratio") + 1] == "1.2"
+
+    def test_view_command_carries_distance_opt_out(self) -> None:
+        assert "--no-check-distance" in view_command(MenuBarSettings(check_distance=False))
+
 
 def test_run_builds_a_controller(monkeypatch: pytest.MonkeyPatch) -> None:
     from webcamcheck import menubar
@@ -212,12 +224,13 @@ class _Recorder:
 
 
 class TestPresetMenus:
-    def test_all_three_standards_are_adjustable(self, quiet_rumps: list[str]) -> None:
+    def test_all_standards_are_adjustable(self, quiet_rumps: list[str]) -> None:
         app = _app(_StubController())
         titles = list(_menu(app).keys())
         assert "靈敏度" in titles
         assert "提醒前等待" in titles
         assert "轉身判定" in titles
+        assert "距離判定" in titles
 
     def test_current_value_is_checked(self, quiet_rumps: list[str]) -> None:
         controller = _StubController()
@@ -238,12 +251,13 @@ class TestPresetMenus:
         assert neck["寬鬆(12°)"].state == 1
         assert neck["標準(8°)"].state == 0
 
-    def test_sustain_and_facing_presets_apply_too(self, quiet_rumps: list[str]) -> None:
+    def test_other_presets_apply_too(self, quiet_rumps: list[str]) -> None:
         controller = _StubController()
         app = _app(controller)
         for menu_title, label, expected in (
             ("提醒前等待", "30 秒", ("sustain", 30.0)),
             ("轉身判定", "嚴格(80%)", ("facing", 0.8)),
+            ("距離判定", "寬鬆(肩寬 120%)", ("near", 1.2)),
         ):
             item = _menu(app)[menu_title][label]
             item.callback(item)

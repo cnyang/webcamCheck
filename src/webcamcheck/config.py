@@ -21,6 +21,10 @@ CONFIG_DIR = Path.home() / ".webcamcheck"
 CONFIG_PATH = CONFIG_DIR / "config.json"
 TUNING_PATH = CONFIG_DIR / "tuning.json"
 
+# 舊 tuning.json 沒有 near_ratio,給預設值才不會整份載入失敗、把調好的靈敏度重置掉。
+# 1.12 是實測來的:正常坐著肩寬在基準的 99~107%,上身前傾是 109~117%。
+DEFAULT_NEAR_RATIO = 1.12
+
 
 @dataclass(frozen=True)
 class Tuning:
@@ -29,6 +33,7 @@ class Tuning:
     neck_tolerance_deg: float
     sustain_seconds: float
     facing_ratio: float
+    near_ratio: float = DEFAULT_NEAR_RATIO
 
 
 def _write_atomically(path: Path, payload: dict[str, Any]) -> None:
@@ -60,8 +65,10 @@ def load_baseline() -> Baseline | None:
     data = _read(CONFIG_PATH)
     if data is None:
         return None
+    # 開發過程中存過、後來拿掉的欄位(face_width)要無視掉,不能因此逼使用者重新校準。
+    known = {field: value for field, value in data.items() if field in Baseline.__dataclass_fields__}
     try:
-        return Baseline(**data)
+        return Baseline(**known)
     except TypeError as exc:
         logger.warning("校準格式不合(%s),請重新校準:%s", exc, CONFIG_PATH)
         return None

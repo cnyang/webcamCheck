@@ -62,3 +62,10 @@ def test_bad_and_good_render_differently() -> None:
     good = draw_posture(_frame(), _landmarks(), SAMPLE, GOOD, BASELINE)
     bad = draw_posture(_frame(), _landmarks(), SAMPLE, Verdict(status=PostureStatus.BAD, forward_slouch=True), BASELINE)
     assert not np.array_equal(good, bad), "狀態不同,顏色與文字應該不同"
+
+
+def test_draws_too_close_warning() -> None:
+    sample = PostureSample(neck_angle_deg=11.0, shoulder_tilt_deg=17.0, shoulder_width=0.70)
+    verdict = Verdict(status=PostureStatus.BAD, too_close=True)
+    canvas = draw_posture(_frame(), _landmarks(), sample, verdict, BASELINE)
+    assert canvas.any()

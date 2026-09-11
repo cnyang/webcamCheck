@@ -11,6 +11,8 @@ FRAME = np.zeros((1, 1, 3), dtype=np.uint8)
 GOOD_SAMPLE = PostureSample(neck_angle_deg=10.0, shoulder_tilt_deg=2.0, shoulder_width=0.50)
 SLOUCH_SAMPLE = PostureSample(neck_angle_deg=30.0, shoulder_tilt_deg=2.0, shoulder_width=0.50)
 TURNED_SAMPLE = PostureSample(neck_angle_deg=60.0, shoulder_tilt_deg=2.0, shoulder_width=0.20)
+# 背打直往前傾:neck 角度正常,肩寬漲到基準的 115%
+TOO_CLOSE_SAMPLE = PostureSample(neck_angle_deg=10.0, shoulder_tilt_deg=2.0, shoulder_width=0.575)
 
 
 class _FixedCamera:
@@ -53,6 +55,8 @@ class _Harness:
             now=now,
             facing_ratio=0.7,
             check_tilt=self.check_tilt,
+            near_ratio=1.12,
+            check_distance=True,
             notify_fn=lambda title, message: self.notified.append(message),
         )
         return verdict.status
@@ -104,4 +108,28 @@ class TestCheckOnce:
         both = PostureSample(neck_angle_deg=30.0, shoulder_tilt_deg=40.0, shoulder_width=0.50)
         h.tick(both, 0.0)
         h.tick(both, 6.0)
-        assert h.notified == ["頭往前垂、肩膀也歪了,調整一下吧"]
+        assert h.notified == ["頭往前垂、肩膀歪掉了,調整一下吧"]
+
+
+class TestTooCloseNotification:
+    def test_sustained_lean_in_notifies_about_distance(self) -> None:
+        h = _Harness()
+        h.tick(TOO_CLOSE_SAMPLE, 0.0)
+        assert h.tick(TOO_CLOSE_SAMPLE, 6.0) is PostureStatus.BAD
+        assert h.notified == ["離螢幕太近了,調整一下吧"]
+
+    def test_slouch_message_wins_over_distance(self) -> None:
+        # 駝背也會把肩膀帶向鏡頭,但該修的是駝背,訊息不要兩個一起報
+        h = _Harness()
+        both = PostureSample(neck_angle_deg=30.0, shoulder_tilt_deg=2.0, shoulder_width=0.60)
+        h.tick(both, 0.0)
+        h.tick(both, 6.0)
+        assert h.notified == ["頭往前垂了,調整一下吧"]
+
+    def test_sitting_back_clears_the_streak(self) -> None:
+        h = _Harness()
+        h.tick(TOO_CLOSE_SAMPLE, 0.0)
+        h.tick(GOOD_SAMPLE, 2.0)
+        h.tick(TOO_CLOSE_SAMPLE, 4.0)
+        assert h.tick(TOO_CLOSE_SAMPLE, 8.0) is PostureStatus.BAD
+        assert h.notified == [], "坐回去之後要重新累積滿 sustain 秒"

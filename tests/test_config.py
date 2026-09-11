@@ -95,3 +95,32 @@ def test_tuning_and_baseline_are_separate_files(tmp_path: Path, monkeypatch: pyt
     assert config_path != tuning_path
     assert config_module.load_tuning() == TUNING
     assert config_module.load_baseline() == BASELINE
+
+
+def test_baseline_with_unknown_fields_still_loads(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # 開發中途存過 face_width 的校準檔要能照常載入,不該逼使用者重新校準
+    config_path = _redirect(tmp_path, monkeypatch)
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        '{"neck_angle_deg": 12.3, "shoulder_tilt_deg": 4.5, "shoulder_width": 0.52, "face_width": 0.22}'
+    )
+    baseline = config_module.load_baseline()
+    assert baseline == Baseline(neck_angle_deg=12.3, shoulder_tilt_deg=4.5, shoulder_width=0.52)
+
+
+def test_old_tuning_without_near_ratio_still_loads(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # 舊 tuning.json 沒有 near_ratio,不該整份被丟掉、把調好的靈敏度重置
+    tuning_path = _redirect_tuning(tmp_path, monkeypatch)
+    tuning_path.parent.mkdir(parents=True)
+    tuning_path.write_text('{"neck_tolerance_deg": 12.0, "sustain_seconds": 15.0, "facing_ratio": 0.55}')
+    tuning = config_module.load_tuning()
+    assert tuning is not None
+    assert tuning.neck_tolerance_deg == 12.0
+    assert tuning.near_ratio == config_module.DEFAULT_NEAR_RATIO
+
+
+def test_tuning_with_near_ratio_round_trips(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _redirect_tuning(tmp_path, monkeypatch)
+    tuning = config_module.Tuning(neck_tolerance_deg=12.0, sustain_seconds=15.0, facing_ratio=0.55, near_ratio=1.2)
+    config_module.save_tuning(tuning)
+    assert config_module.load_tuning() == tuning
