@@ -1,0 +1,64 @@
+[project]
+name = "webcamcheck"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "cnyang", email = "cheinnn@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "mediapipe==0.10.21",
+    "numpy<2",
+    "opencv-python>=4.9,<5",
+    "pyobjc-framework-avfoundation>=12.2.2",
+    "pyobjc-framework-libdispatch>=12.2.2",
+    "rumps>=0.4.0",
+]
+
+[project.scripts]
+webcamcheck = "webcamcheck:main"
+
+[build-system]
+requires = ["uv_build>=0.12.12,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "bandit>=1.9.4",
+    "black>=26.5.1",
+    "isort>=9.0.1",
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.6",
+]
+
+[tool.black]
+line-length = 120
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+line_length = 120
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["src/webcamcheck"]
+
+[tool.bandit]
+exclude_dirs = [".venv", "tests"]
