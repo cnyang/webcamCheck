@@ -21,6 +21,7 @@ DEFAULT_TILT_TOLERANCE = 15.0
 DEFAULT_FACING_RATIO = 0.7
 # 實測:正常坐著肩寬在基準的 99~107%,上身前傾是 109~117%。
 DEFAULT_NEAR_RATIO = config.DEFAULT_NEAR_RATIO
+DEFAULT_YAW_TOLERANCE = config.DEFAULT_YAW_TOLERANCE
 
 
 def _sound_name(args: argparse.Namespace) -> str | None:
@@ -83,6 +84,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
         near_ratio=args.near_ratio,
         check_distance=_check_distance(args),
         sound_name=_sound_name(args),
+        yaw_tolerance=args.yaw_tolerance,
     )
 
 
@@ -90,7 +92,10 @@ def _cmd_debug(args: argparse.Namespace) -> None:
     """即時印出目前的角度和判定,讓你可以實際轉身/駝背,看數字決定門檻要設多少。"""
     baseline = _require_baseline()
     label = {PostureStatus.GOOD: "良好", PostureStatus.BAD: "歪掉", PostureStatus.UNKNOWN: "不判斷"}
-    print(f"基準:neck={baseline.neck_angle_deg:.1f}°  肩寬={baseline.shoulder_width:.3f}")
+    print(
+        f"基準:neck={baseline.neck_angle_deg:.1f}°  肩寬={baseline.shoulder_width:.3f}  "
+        f"nose offset={baseline.nose_offset_ratio:.3f}"
+    )
     print("轉去用另一台電腦、離開座位、故意駝背、上身往前傾各試幾秒,看下面數字怎麼變。Ctrl+C 結束。\n")
     with _open_camera(args) as camera:
         estimator = PoseEstimator()
@@ -111,12 +116,14 @@ def _cmd_debug(args: argparse.Namespace) -> None:
                         check_tilt=args.check_tilt,
                         near_ratio=args.near_ratio,
                         check_distance=_check_distance(args),
+                        yaw_tolerance=args.yaw_tolerance,
                     )
                     ratio = sample.shoulder_width / baseline.shoulder_width
                     print(
                         f"neck={sample.neck_angle_deg:6.1f}°  "
                         f"tilt={sample.shoulder_tilt_deg:6.1f}°  "
                         f"肩寬={sample.shoulder_width:.3f}(基準的 {ratio:4.0%})  "
+                        f"nose offset={sample.nose_offset_ratio:.3f}(基準 {baseline.nose_offset_ratio:.3f})  "
                         f"-> {label[verdict.status]}{'(太近)' if verdict.too_close else ''}",
                         flush=True,
                     )
@@ -158,6 +165,7 @@ def _cmd_view(args: argparse.Namespace) -> None:
                             check_tilt=args.check_tilt,
                             near_ratio=args.near_ratio,
                             check_distance=_check_distance(args),
+                            yaw_tolerance=args.yaw_tolerance,
                         )
                     )
                 canvas = overlay.draw_posture(frame, landmarks, sample, verdict, baseline)
@@ -185,6 +193,7 @@ def _menubar_settings(args: argparse.Namespace) -> controller.MenuBarSettings:
         sustain_seconds=args.sustain,
         cooldown_seconds=args.cooldown,
         sound_name=_sound_name(args),
+        yaw_tolerance=args.yaw_tolerance,
     )
 
 
@@ -204,6 +213,8 @@ def menubar_program_args(args: argparse.Namespace) -> list[str]:
         str(args.facing_ratio),
         "--near-ratio",
         str(args.near_ratio),
+        "--yaw-tolerance",
+        str(args.yaw_tolerance),
         "--interval",
         str(args.interval),
         "--sustain",
@@ -286,6 +297,15 @@ def _add_detection_args(parser: argparse.ArgumentParser) -> None:
         "--no-check-distance",
         action="store_true",
         help="關掉「離螢幕太近」偵測,只看姿勢角度",
+    )
+    parser.add_argument(
+        "--yaw-tolerance",
+        type=float,
+        default=DEFAULT_YAW_TOLERANCE,
+        help=(
+            "鼻子偏移比基準多多少(佔肩寬比例)就當作轉頭看旁邊,不判斷姿勢"
+            f"(預設 {DEFAULT_YAW_TOLERANCE},未實測,用 debug/view 看數字再調)"
+        ),
     )
     parser.add_argument("--interval", type=float, default=2.0, help="每幾秒偵測一次(預設 2)")
 

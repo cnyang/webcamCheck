@@ -1,18 +1,29 @@
 import pytest
 
-from webcamcheck.posture import Baseline, PostureSample, PostureStatus, Verdict, classify, is_facing_camera
+from webcamcheck.posture import (
+    Baseline,
+    PostureSample,
+    PostureStatus,
+    Verdict,
+    classify,
+    is_facing_camera,
+    is_head_turned,
+)
 
 FACING_RATIO = 0.7
 NEAR_RATIO = 1.12
+YAW_TOLERANCE = 0.2
 
 
 @pytest.fixture
 def baseline() -> Baseline:
-    return Baseline(neck_angle_deg=10.0, shoulder_tilt_deg=2.0, shoulder_width=0.50)
+    return Baseline(neck_angle_deg=10.0, shoulder_tilt_deg=2.0, shoulder_width=0.50, nose_offset_ratio=0.02)
 
 
-def _sample(neck: float = 10.0, tilt: float = 2.0, width: float = 0.50) -> PostureSample:
-    return PostureSample(neck_angle_deg=neck, shoulder_tilt_deg=tilt, shoulder_width=width)
+def _sample(neck: float = 10.0, tilt: float = 2.0, width: float = 0.50, nose_offset: float = 0.02) -> PostureSample:
+    return PostureSample(
+        neck_angle_deg=neck, shoulder_tilt_deg=tilt, shoulder_width=width, nose_offset_ratio=nose_offset
+    )
 
 
 def _classify(
@@ -27,6 +38,7 @@ def _classify(
         check_tilt=check_tilt,
         near_ratio=NEAR_RATIO,
         check_distance=check_distance,
+        yaw_tolerance=YAW_TOLERANCE,
     )
 
 
@@ -74,6 +86,17 @@ class TestClassify:
         # 只是稍微動一下(肩寬 90%)不該被當成轉身而停止監控
         assert _classify(_sample(neck=30.0, width=0.45), baseline).status is PostureStatus.BAD
 
+    def test_head_turned_to_side_screen_is_unknown_not_bad(self, baseline: Baseline) -> None:
+        # 轉頭看旁邊螢幕:單耳可見時的水平偏移會把 neck_angle 推高,但這不是真的駝背,
+        # 鼻子偏移量超過門檻就該擋成 UNKNOWN,不能報 forward_slouch。
+        verdict = _classify(_sample(neck=30.0, nose_offset=0.35), baseline)
+        assert verdict.status is PostureStatus.UNKNOWN
+        assert not verdict.forward_slouch
+
+    def test_small_head_turn_within_tolerance_still_judged(self, baseline: Baseline) -> None:
+        # 只是稍微轉頭(偏移量在容許範圍內)不該整個停止監控
+        assert _classify(_sample(nose_offset=0.10), baseline).status is PostureStatus.GOOD
+
 
 class TestIsFacingCamera:
     def test_full_width_is_facing(self, baseline: Baseline) -> None:
@@ -84,6 +107,17 @@ class TestIsFacingCamera:
 
     def test_below_threshold_is_not_facing(self, baseline: Baseline) -> None:
         assert not is_facing_camera(_sample(width=0.34), baseline, FACING_RATIO)
+
+
+class TestIsHeadTurned:
+    def test_matches_baseline_is_not_turned(self, baseline: Baseline) -> None:
+        assert not is_head_turned(_sample(), baseline, YAW_TOLERANCE)
+
+    def test_at_threshold_is_not_turned(self, baseline: Baseline) -> None:
+        assert not is_head_turned(_sample(nose_offset=0.22), baseline, YAW_TOLERANCE)
+
+    def test_beyond_threshold_is_turned(self, baseline: Baseline) -> None:
+        assert is_head_turned(_sample(nose_offset=0.23), baseline, YAW_TOLERANCE)
 
 
 class TestTooClose:

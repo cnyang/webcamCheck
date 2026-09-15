@@ -1,6 +1,12 @@
 import pytest
 
-from webcamcheck.geometry import Point, ear_shoulder_angle, shoulder_tilt_angle, shoulder_width
+from webcamcheck.geometry import (
+    Point,
+    ear_shoulder_angle,
+    nose_shoulder_offset_ratio,
+    shoulder_tilt_angle,
+    shoulder_width,
+)
 
 
 class TestEarShoulderAngle:
@@ -67,3 +73,28 @@ class TestShoulderWidthAsDistance:
         upright = shoulder_width(Point(0.40, 0.6), Point(0.60, 0.6))
         leaning = shoulder_width(Point(0.37, 0.6), Point(0.63, 0.6))
         assert leaning > upright
+
+
+class TestNoseShoulderOffsetRatio:
+    def test_nose_above_shoulder_mid_is_zero(self) -> None:
+        assert nose_shoulder_offset_ratio(Point(0.5, 0.3), Point(0.5, 0.6), shoulder_width=0.2) == pytest.approx(0.0)
+
+    def test_offset_scales_with_shoulder_width(self) -> None:
+        narrow = nose_shoulder_offset_ratio(Point(0.55, 0.3), Point(0.5, 0.6), shoulder_width=0.1)
+        wide = nose_shoulder_offset_ratio(Point(0.55, 0.3), Point(0.5, 0.6), shoulder_width=0.2)
+        assert narrow == pytest.approx(wide * 2)
+
+    def test_turning_head_increases_ratio(self) -> None:
+        # 轉頭看側邊螢幕時鼻子明顯偏離肩膀中點,比值要比面向鏡頭時大
+        facing = nose_shoulder_offset_ratio(Point(0.50, 0.3), Point(0.5, 0.6), shoulder_width=0.2)
+        turned = nose_shoulder_offset_ratio(Point(0.62, 0.3), Point(0.5, 0.6), shoulder_width=0.2)
+        assert turned > facing
+
+    def test_zero_shoulder_width_does_not_divide_by_zero(self) -> None:
+        assert nose_shoulder_offset_ratio(Point(0.6, 0.3), Point(0.5, 0.6), shoulder_width=0.0) == 0.0
+
+    def test_aspect_ratio_scales_horizontal_offset(self) -> None:
+        nose, mid = Point(0.6, 0.3), Point(0.5, 0.6)
+        square = nose_shoulder_offset_ratio(nose, mid, shoulder_width=0.2, aspect_ratio=1.0)
+        widescreen = nose_shoulder_offset_ratio(nose, mid, shoulder_width=0.2, aspect_ratio=16 / 9)
+        assert widescreen > square

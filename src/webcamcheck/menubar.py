@@ -20,6 +20,7 @@ import rumps
 
 from webcamcheck.controller import MenuBarController, MenuBarSettings, UiState
 from webcamcheck.posture import PostureStatus
+from webcamcheck.schedule import DEFAULT_WINDOWS, describe
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ STATUS_ICONS = {
     PostureStatus.UNKNOWN: "⚪",
 }
 PAUSED_ICON = "⏸"
+SCHEDULED_OFF_ICON = "🌙"
 ERROR_ICON = "⚠️"
 BUSY_ICON = "⏳"
 
@@ -37,6 +39,8 @@ STATUS_TEXTS = {
     PostureStatus.BAD: "姿勢歪了",
     PostureStatus.UNKNOWN: "沒偵測到人(離開座位或轉身)",
 }
+
+SCHEDULED_OFF_TEXT = f"不在監控時段(監控時段:{describe(DEFAULT_WINDOWS)})"
 
 PAUSE_LABEL = "暫停監控"
 RESUME_LABEL = "繼續監控"
@@ -47,6 +51,9 @@ SUSTAIN_PRESETS = [("3 秒", 3.0), ("5 秒", 5.0), ("8 秒", 8.0), ("15 秒", 15
 FACING_PRESETS = [("嚴格(80%)", 0.8), ("標準(70%)", 0.7), ("寬鬆(55%)", 0.55)]
 # 實測:正常坐著肩寬在基準的 99~107%,上身前傾是 109~117%。
 NEAR_PRESETS = [("嚴格(肩寬 108%)", 1.08), ("標準(肩寬 112%)", 1.12), ("寬鬆(肩寬 120%)", 1.2)]
+# 這幾個數值還沒實測(需要真的轉頭看側邊螢幕才能量),用 `webcamcheck debug`/`view`
+# 看 nose offset ratio 的實際變化後再調整。
+YAW_PRESETS = [("嚴格(0.12)", 0.12), ("標準(0.20)", 0.20), ("寬鬆(0.30)", 0.30)]
 
 
 def title_for(state: UiState) -> str:
@@ -56,6 +63,8 @@ def title_for(state: UiState) -> str:
         return BUSY_ICON
     if state.paused:
         return PAUSED_ICON
+    if state.scheduled_off:
+        return SCHEDULED_OFF_ICON
     if state.status is None:
         return BUSY_ICON
     return STATUS_ICONS[state.status]
@@ -68,6 +77,8 @@ def detail_for(state: UiState) -> str:
         return "校準中,請坐正…"
     if state.paused:
         return "已暫停監控"
+    if state.scheduled_off:
+        return SCHEDULED_OFF_TEXT
     if state.status is None:
         return "啟動中…"
     return STATUS_TEXTS[state.status]
@@ -78,7 +89,14 @@ def view_command(settings: MenuBarSettings) -> list[str]:
     command = [sys.executable, "-m", "webcamcheck", "view", "--camera-name", settings.camera_name]
     if settings.camera_id is not None:
         command += ["--camera-id", settings.camera_id]
-    command += ["--facing-ratio", str(settings.facing_ratio), "--near-ratio", str(settings.near_ratio)]
+    command += [
+        "--facing-ratio",
+        str(settings.facing_ratio),
+        "--near-ratio",
+        str(settings.near_ratio),
+        "--yaw-tolerance",
+        str(settings.yaw_tolerance),
+    ]
     if not settings.check_distance:
         command.append("--no-check-distance")
     return command
@@ -108,6 +126,10 @@ class PostureApp(rumps.App):  # type: ignore[misc]  # rumps 沒有型別標註,s
             "距離判定", NEAR_PRESETS, lambda: controller.settings.near_ratio, controller.set_near_ratio
         )
 
+        self._yaw_items = self._preset_menu(
+            "轉頭判定", YAW_PRESETS, lambda: controller.settings.yaw_tolerance, controller.set_yaw_tolerance
+        )
+
         self.menu = [
             self._detail_item,
             None,
@@ -119,6 +141,7 @@ class PostureApp(rumps.App):  # type: ignore[misc]  # rumps 沒有型別標註,s
             self._sustain_items,
             self._facing_items,
             self._near_items,
+            self._yaw_items,
             None,
             rumps.MenuItem("結束", callback=self._quit),
         ]

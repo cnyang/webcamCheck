@@ -19,6 +19,7 @@ class PostureSample:
     neck_angle_deg: float
     shoulder_tilt_deg: float
     shoulder_width: float
+    nose_offset_ratio: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,7 @@ class Baseline:
     neck_angle_deg: float
     shoulder_tilt_deg: float
     shoulder_width: float
+    nose_offset_ratio: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -57,6 +59,15 @@ def is_too_close(sample: PostureSample, baseline: Baseline, near_ratio: float) -
     return sample.shoulder_width > baseline.shoulder_width * near_ratio
 
 
+def is_head_turned(sample: PostureSample, baseline: Baseline, yaw_tolerance: float) -> bool:
+    """鼻子偏移比基準值多太多,代表轉頭看旁邊(例如另一台螢幕),這時候不該判斷坐姿。
+
+    單耳可見時,ear_shoulder_angle 分不出「轉頭讓耳朵橫向偏移」和「真的低頭」,兩者都會讓
+    角度變大。用鼻子偏移量單獨擋一次,避免轉頭被誤判成 forward_slouch。
+    """
+    return sample.nose_offset_ratio > baseline.nose_offset_ratio + yaw_tolerance
+
+
 def classify(
     sample: PostureSample,
     baseline: Baseline,
@@ -66,10 +77,13 @@ def classify(
     check_tilt: bool = False,
     near_ratio: float = 1.12,
     check_distance: bool = True,
+    yaw_tolerance: float = 0.2,
 ) -> Verdict:
     """與校準基準比較,只在角度「變大」超過容許值時才算歪掉;
     比基準更挺直不算異常,避免使用者坐得更端正反而被誤判。"""
     if not is_facing_camera(sample, baseline, facing_ratio):
+        return UNKNOWN_VERDICT
+    if is_head_turned(sample, baseline, yaw_tolerance):
         return UNKNOWN_VERDICT
 
     forward_slouch = sample.neck_angle_deg > baseline.neck_angle_deg + neck_tolerance_deg

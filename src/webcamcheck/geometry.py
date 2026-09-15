@@ -50,6 +50,21 @@ def angle_at_vertex(vertex: Point, first: Point, second: Point, aspect_ratio: fl
     return math.degrees(math.atan2(abs(cross), dot))
 
 
+def nose_shoulder_offset_ratio(
+    nose: Point, shoulder_mid: Point, shoulder_width: float, aspect_ratio: float = 1.0
+) -> float:
+    """鼻子偏離兩肩中點的水平距離,除以「當下這一幀」的肩寬正規化,跟人離鏡頭多遠無關。
+
+    面向鏡頭時鼻子在肩膀中點正上方,比值接近 0;左右轉頭(例如看旁邊的螢幕)時鼻子明顯
+    偏移,比值會變大。用來擋掉「轉頭被誤判成低頭」:單耳可見時,耳朵相對肩膀中點的水平
+    偏移會被 ear_shoulder_angle 當成頭往前垂,但這其實是轉頭造成的,不是真的駝背。
+    """
+    if shoulder_width <= 0:
+        return 0.0
+    dx = abs(nose.x - shoulder_mid.x) * aspect_ratio
+    return dx / shoulder_width
+
+
 def shoulder_width(left_shoulder: Point, right_shoulder: Point, aspect_ratio: float = 1.0) -> float:
     """兩肩在畫面上的水平距離。同一個值撐兩個判定,因為兩種情況讓它往相反方向動:
 

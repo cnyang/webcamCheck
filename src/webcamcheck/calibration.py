@@ -34,4 +34,5 @@ def calibrate(
         neck_angle_deg=sum(s.neck_angle_deg for s in samples) / len(samples),
         shoulder_tilt_deg=sum(s.shoulder_tilt_deg for s in samples) / len(samples),
         shoulder_width=sum(s.shoulder_width for s in samples) / len(samples),
+        nose_offset_ratio=sum(s.nose_offset_ratio for s in samples) / len(samples),
     )

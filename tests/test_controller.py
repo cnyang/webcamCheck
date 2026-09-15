@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import numpy as np
 import pytest
 
@@ -72,6 +74,8 @@ class _Harness:
         self.open_error = open_error
         self.sample = sample
         self.now = 0.0
+        # 早上 10 點,落在監控時段內,測試才不會受跑測試當下的真實時間影響。
+        self.clock = datetime(2024, 1, 1, 10, 0)
 
         self.saved_tuning: list[config.Tuning] = []
         self.controller = MenuBarController(
@@ -82,6 +86,7 @@ class _Harness:
             save_baseline=self.saved.append,
             calibrate_fn=self._calibrate,
             now_fn=lambda: self.now,
+            clock_fn=lambda: self.clock,
             notify_fn=lambda _title, message: self.notified.append(message),
             # 一定要注入,否則測試會去讀使用者真正的 ~/.webcamcheck/tuning.json
             load_tuning=lambda: None,
@@ -198,6 +203,79 @@ class TestCameraTrouble:
         for t in range(0, 40, 2):
             h.tick_at(float(t))
         assert len(h.cameras) == 1
+
+
+class TestSchedule:
+    """8:00-12:00、13:30-17:00 才監控,其餘時間視同暫停,不開鏡頭。"""
+
+    def test_outside_schedule_does_not_open_camera(self) -> None:
+        h = _Harness()
+        h.clock = datetime(2024, 1, 1, 7, 0)
+        h.tick_at(0.0)
+        assert h.cameras == []
+        assert h.controller.ui.scheduled_off is True
+
+    def test_within_morning_window_monitors_normally(self) -> None:
+        h = _Harness()
+        h.clock = datetime(2024, 1, 1, 8, 0)
+        assert h.tick_at(0.0) is PostureStatus.GOOD
+        assert h.controller.ui.scheduled_off is False
+
+    def test_lunch_gap_stops_monitoring(self) -> None:
+        h = _Harness()
+        h.clock = datetime(2024, 1, 1, 12, 30)
+        h.tick_at(0.0)
+        assert h.cameras == []
+        assert h.controller.ui.scheduled_off is True
+
+    def test_within_afternoon_window_monitors_normally(self) -> None:
+        h = _Harness()
+        h.clock = datetime(2024, 1, 1, 14, 0)
+        assert h.tick_at(0.0) is PostureStatus.GOOD
+
+    def test_after_afternoon_window_stops_monitoring(self) -> None:
+        h = _Harness()
+        h.clock = datetime(2024, 1, 1, 18, 0)
+        h.tick_at(0.0)
+        assert h.cameras == []
+
+    def test_camera_closes_when_schedule_ends(self) -> None:
+        h = _Harness()
+        h.clock = datetime(2024, 1, 1, 11, 59)
+        h.tick_at(0.0)
+        assert h.cameras[0].closed is False
+
+        h.clock = datetime(2024, 1, 1, 12, 0)
+        h.tick_at(2.0)
+        assert h.cameras[0].closed is True
+
+    def test_camera_reopens_when_schedule_resumes(self) -> None:
+        h = _Harness()
+        h.clock = datetime(2024, 1, 1, 12, 30)
+        h.tick_at(0.0)
+        h.clock = datetime(2024, 1, 1, 13, 30)
+        assert h.tick_at(2.0) is PostureStatus.GOOD
+
+    def test_streak_does_not_survive_the_schedule_gap(self) -> None:
+        # 中午暫停期間累積的秒數不算數,下午恢復後要重新累積滿 sustain 才會通知
+        h = _Harness(sample=SLOUCH)
+        h.clock = datetime(2024, 1, 1, 11, 59)
+        h.tick_at(0.0)
+        h.clock = datetime(2024, 1, 1, 12, 30)
+        h.tick_at(2.0)
+        h.clock = datetime(2024, 1, 1, 13, 30)
+        h.tick_at(100.0)
+        h.tick_at(103.0)
+        assert h.notified == [], "恢復後才 3 秒,還沒滿 sustain 就不該通知"
+        h.tick_at(106.0)
+        assert h.notified == ["頭往前垂了,調整一下吧"]
+
+    def test_scheduled_off_never_notifies(self) -> None:
+        h = _Harness(sample=SLOUCH)
+        h.clock = datetime(2024, 1, 1, 18, 0)
+        for t in range(0, 60, 2):
+            h.tick_at(float(t))
+        assert h.notified == []
 
 
 class TestPause:
@@ -332,6 +410,7 @@ class TestTuning:
             save_baseline=h.saved.append,
             calibrate_fn=h._calibrate,
             now_fn=lambda: h.now,
+            clock_fn=lambda: h.clock,
             notify_fn=lambda _t, m: h.notified.append(m),
             load_tuning=lambda: tuning,
             save_tuning=saved.append,
@@ -360,6 +439,17 @@ class TestTuning:
         tuning = config.Tuning(neck_tolerance_deg=12.0, sustain_seconds=30.0, facing_ratio=0.55, near_ratio=1.2)
         h, _ = self._harness_with_tuning(tuning)
         assert h.controller.settings.near_ratio == 1.2
+
+    def test_yaw_tolerance_setter_persists(self) -> None:
+        h, saved = self._harness_with_tuning(None)
+        h.controller.set_yaw_tolerance(0.3)
+        assert h.controller.settings.yaw_tolerance == 0.3
+        assert saved[-1].yaw_tolerance == 0.3
+
+    def test_saved_yaw_tolerance_wins_over_startup_flags(self) -> None:
+        tuning = config.Tuning(neck_tolerance_deg=12.0, sustain_seconds=30.0, facing_ratio=0.55, yaw_tolerance=0.3)
+        h, _ = self._harness_with_tuning(tuning)
+        assert h.controller.settings.yaw_tolerance == 0.3
 
     def test_too_close_is_detected_in_tick(self) -> None:
         h, _ = self._harness_with_tuning(None)

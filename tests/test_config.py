@@ -124,3 +124,25 @@ def test_tuning_with_near_ratio_round_trips(tmp_path: Path, monkeypatch: pytest.
     tuning = config_module.Tuning(neck_tolerance_deg=12.0, sustain_seconds=15.0, facing_ratio=0.55, near_ratio=1.2)
     config_module.save_tuning(tuning)
     assert config_module.load_tuning() == tuning
+
+
+def test_old_tuning_without_yaw_tolerance_still_loads(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # 舊 tuning.json 沒有 yaw_tolerance,不該整份被丟掉、把調好的靈敏度重置
+    tuning_path = _redirect_tuning(tmp_path, monkeypatch)
+    tuning_path.parent.mkdir(parents=True)
+    tuning_path.write_text(
+        '{"neck_tolerance_deg": 12.0, "sustain_seconds": 15.0, "facing_ratio": 0.55, "near_ratio": 1.2}'
+    )
+    tuning = config_module.load_tuning()
+    assert tuning is not None
+    assert tuning.neck_tolerance_deg == 12.0
+    assert tuning.yaw_tolerance == config_module.DEFAULT_YAW_TOLERANCE
+
+
+def test_tuning_with_yaw_tolerance_round_trips(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _redirect_tuning(tmp_path, monkeypatch)
+    tuning = config_module.Tuning(
+        neck_tolerance_deg=12.0, sustain_seconds=15.0, facing_ratio=0.55, near_ratio=1.2, yaw_tolerance=0.3
+    )
+    config_module.save_tuning(tuning)
+    assert config_module.load_tuning() == tuning

@@ -1,5 +1,14 @@
 from webcamcheck.controller import UiState
-from webcamcheck.menubar import BUSY_ICON, ERROR_ICON, PAUSED_ICON, STATUS_ICONS, detail_for, title_for
+from webcamcheck.menubar import (
+    BUSY_ICON,
+    ERROR_ICON,
+    PAUSED_ICON,
+    SCHEDULED_OFF_ICON,
+    SCHEDULED_OFF_TEXT,
+    STATUS_ICONS,
+    detail_for,
+    title_for,
+)
 from webcamcheck.posture import PostureStatus
 
 
@@ -20,6 +29,12 @@ class TestTitleFor:
     def test_before_first_detection(self) -> None:
         assert title_for(UiState()) == BUSY_ICON
 
+    def test_scheduled_off_shows_its_own_icon(self) -> None:
+        assert title_for(UiState(scheduled_off=True, status=PostureStatus.GOOD)) == SCHEDULED_OFF_ICON
+
+    def test_paused_beats_scheduled_off(self) -> None:
+        assert title_for(UiState(paused=True, scheduled_off=True)) == PAUSED_ICON
+
 
 class TestDetailFor:
     def test_error_text_is_surfaced(self) -> None:
@@ -34,3 +49,6 @@ class TestDetailFor:
     def test_each_status_has_text(self) -> None:
         for status in PostureStatus:
             assert detail_for(UiState(status=status))
+
+    def test_scheduled_off(self) -> None:
+        assert detail_for(UiState(scheduled_off=True)) == SCHEDULED_OFF_TEXT

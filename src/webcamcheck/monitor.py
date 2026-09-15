@@ -7,6 +7,7 @@ import logging
 import time
 from collections.abc import Callable
 
+from webcamcheck import config
 from webcamcheck.camera import Camera
 from webcamcheck.notifier import DEFAULT_SOUND, notify
 from webcamcheck.ports import FrameSource, PoseDetector
@@ -27,6 +28,7 @@ def evaluate(
     check_tilt: bool,
     near_ratio: float,
     check_distance: bool,
+    yaw_tolerance: float = config.DEFAULT_YAW_TOLERANCE,
 ) -> Verdict:
     """拍一幀並判斷這一刻的姿勢。拍不到影格或偵測不到人(離開座位)一律回 UNKNOWN,
     絕對不能直接 return 不理它,否則狀態機不知道中斷過,回座後會被舊的計時立刻觸發通知。"""
@@ -45,6 +47,7 @@ def evaluate(
         check_tilt=check_tilt,
         near_ratio=near_ratio,
         check_distance=check_distance,
+        yaw_tolerance=yaw_tolerance,
     )
 
 
@@ -63,6 +66,7 @@ def check_once(
     near_ratio: float = 1.2,
     check_distance: bool = True,
     notify_fn: Callable[[str, str], None] = notify,
+    yaw_tolerance: float = config.DEFAULT_YAW_TOLERANCE,
 ) -> Verdict:
     """跑一次「拍一幀 -> 判斷 -> 節流通知」,抽出來是為了能在測試裡直接呼叫,不用真的等待或開鏡頭。"""
     verdict = evaluate(
@@ -75,6 +79,7 @@ def check_once(
         check_tilt=check_tilt,
         near_ratio=near_ratio,
         check_distance=check_distance,
+        yaw_tolerance=yaw_tolerance,
     )
     should_notify = state.update(
         status=verdict.status,
@@ -114,6 +119,7 @@ def run(
     near_ratio: float = 1.2,
     check_distance: bool = True,
     sound_name: str | None = DEFAULT_SOUND,
+    yaw_tolerance: float = config.DEFAULT_YAW_TOLERANCE,
 ) -> None:
     state = PostureMonitorState()
     notify_fn = functools.partial(notify, sound_name=sound_name)
@@ -137,6 +143,7 @@ def run(
                     near_ratio=near_ratio,
                     check_distance=check_distance,
                     notify_fn=notify_fn,
+                    yaw_tolerance=yaw_tolerance,
                 )
                 time.sleep(check_interval_seconds)
         except KeyboardInterrupt:

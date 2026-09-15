@@ -12,6 +12,7 @@ def test_run_defaults() -> None:
     assert args.cooldown == 120.0
     assert args.facing_ratio == 0.7
     assert args.near_ratio == 1.12
+    assert args.yaw_tolerance == 0.2
     assert args.no_check_distance is False, "距離偵測預設開啟"
     assert args.check_tilt is False, "肩膀傾斜偵測預設要關閉,避免轉身誤報"
     assert args.func.__name__ == "_cmd_run"

@@ -10,6 +10,7 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 
 from webcamcheck import config
 from webcamcheck.calibration import calibrate
@@ -20,6 +21,7 @@ from webcamcheck.notifier import DEFAULT_SOUND, notify
 from webcamcheck.ports import CameraHandle, PoseDetector
 from webcamcheck.pose_estimator import PoseEstimator
 from webcamcheck.posture import Baseline, PostureStatus
+from webcamcheck.schedule import DEFAULT_WINDOWS, ScheduleWindow, is_within_schedule
 from webcamcheck.state import PostureMonitorState
 
 logger = logging.getLogger(__name__)
@@ -39,6 +41,7 @@ class MenuBarSettings:
     facing_ratio: float = 0.7
     check_tilt: bool = False
     near_ratio: float = config.DEFAULT_NEAR_RATIO
+    yaw_tolerance: float = config.DEFAULT_YAW_TOLERANCE
     check_distance: bool = True
     interval_seconds: float = 2.0
     sustain_seconds: float = 8.0
@@ -56,6 +59,7 @@ class UiState:
     error: str | None = None
     status: PostureStatus | None = None
     pending_notice: str | None = None
+    scheduled_off: bool = False
 
 
 def open_camera(settings: MenuBarSettings) -> Camera:
@@ -72,9 +76,11 @@ class MenuBarController:
         save_baseline: Callable[[Baseline], None] = config.save_baseline,
         calibrate_fn: Callable[..., Baseline] = calibrate,
         now_fn: Callable[[], float] = time.monotonic,
+        clock_fn: Callable[[], datetime] = datetime.now,
         notify_fn: Callable[[str, str], None] | None = None,
         load_tuning: Callable[[], config.Tuning | None] = config.load_tuning,
         save_tuning: Callable[[config.Tuning], None] = config.save_tuning,
+        schedule_windows: tuple[ScheduleWindow, ...] = DEFAULT_WINDOWS,
     ) -> None:
         self.settings = settings
         self.ui = UiState()
@@ -84,8 +90,10 @@ class MenuBarController:
         self._save_baseline = save_baseline
         self._calibrate = calibrate_fn
         self._now = now_fn
+        self._clock = clock_fn
         self._notify = notify_fn or functools.partial(notify, sound_name=settings.sound_name)
         self._save_tuning = save_tuning
+        self._schedule_windows = schedule_windows
 
         # 從選單調過的標準要贏過啟動參數,否則每次登入都會被 plist 裡的舊值蓋回去。
         tuning = load_tuning()
@@ -94,6 +102,7 @@ class MenuBarController:
             self.settings.sustain_seconds = tuning.sustain_seconds
             self.settings.facing_ratio = tuning.facing_ratio
             self.settings.near_ratio = tuning.near_ratio
+            self.settings.yaw_tolerance = tuning.yaw_tolerance
 
         self._monitor_state = PostureMonitorState()
         self._camera: CameraHandle | None = None
@@ -127,6 +136,10 @@ class MenuBarController:
         self.settings.near_ratio = ratio
         self._tuning_changed()
 
+    def set_yaw_tolerance(self, tolerance: float) -> None:
+        self.settings.yaw_tolerance = tolerance
+        self._tuning_changed()
+
     def _tuning_changed(self) -> None:
         """標準一改就把計時歸零:否則放寬門檻的瞬間,之前累積的秒數會立刻觸發一次通知。"""
         self._monitor_state = PostureMonitorState()
@@ -136,6 +149,7 @@ class MenuBarController:
                 sustain_seconds=self.settings.sustain_seconds,
                 facing_ratio=self.settings.facing_ratio,
                 near_ratio=self.settings.near_ratio,
+                yaw_tolerance=self.settings.yaw_tolerance,
             )
         )
 
@@ -176,7 +190,14 @@ class MenuBarController:
     # --- 主迴圈 ---------------------------------------------------
 
     def tick(self) -> UiState:
+        self.ui.scheduled_off = not is_within_schedule(self._clock().time(), self._schedule_windows)
         if self.ui.busy or self.ui.paused:
+            return self.ui
+        if self.ui.scheduled_off:
+            # 邊緣觸發:只在真的有鏡頭開著時才關,避免每個 tick 都重置計時。
+            if self._camera is not None:
+                self.close_camera()
+                self._monitor_state = PostureMonitorState()
             return self.ui
         if self._baseline is None:
             self.ui.error = NOT_CALIBRATED_MESSAGE
@@ -203,6 +224,7 @@ class MenuBarController:
             near_ratio=self.settings.near_ratio,
             check_distance=self.settings.check_distance,
             notify_fn=self._notify,
+            yaw_tolerance=self.settings.yaw_tolerance,
         )
         self.ui.status = verdict.status
         self.ui.error = None

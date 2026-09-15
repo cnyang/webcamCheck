@@ -25,6 +25,10 @@ TUNING_PATH = CONFIG_DIR / "tuning.json"
 # 1.12 是實測來的:正常坐著肩寬在基準的 99~107%,上身前傾是 109~117%。
 DEFAULT_NEAR_RATIO = 1.12
 
+# 這個值還沒實測(需要真的轉頭看側邊螢幕才能量),先給個保守起始值,
+# 用 `webcamcheck debug` 或 `view` 觀察 nose offset ratio 的實際變化後再調。
+DEFAULT_YAW_TOLERANCE = 0.2
+
 
 @dataclass(frozen=True)
 class Tuning:
@@ -34,6 +38,7 @@ class Tuning:
     sustain_seconds: float
     facing_ratio: float
     near_ratio: float = DEFAULT_NEAR_RATIO
+    yaw_tolerance: float = DEFAULT_YAW_TOLERANCE
 
 
 def _write_atomically(path: Path, payload: dict[str, Any]) -> None:

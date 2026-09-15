@@ -1,6 +1,14 @@
 import pytest
 
-from webcamcheck.landmarks import LEFT_EAR, LEFT_SHOULDER, RIGHT_EAR, RIGHT_SHOULDER, RawLandmark, sample_from_landmarks
+from webcamcheck.landmarks import (
+    LEFT_EAR,
+    LEFT_SHOULDER,
+    NOSE,
+    RIGHT_EAR,
+    RIGHT_SHOULDER,
+    RawLandmark,
+    sample_from_landmarks,
+)
 
 
 def _landmarks(overrides: dict[int, RawLandmark]) -> list[RawLandmark]:
@@ -54,3 +62,22 @@ class TestSampleFromLandmarks:
         sample = sample_from_landmarks(_facing(ear_y=0.75))
         assert sample is not None
         assert sample.neck_angle_deg > 90.0
+
+    def test_nose_offset_ratio_is_zero_when_facing_camera(self) -> None:
+        sample = sample_from_landmarks(_facing())
+        assert sample is not None
+        assert sample.nose_offset_ratio == pytest.approx(0.0)
+
+    def test_turned_head_reports_nonzero_nose_offset_ratio(self) -> None:
+        landmarks = _facing()
+        landmarks[NOSE] = RawLandmark(x=0.58, y=0.3, visibility=0.9)
+        # 轉頭時遠側耳朵常常同時不可見,只留單耳,重現使用者「轉頭看旁邊螢幕」的情境
+        landmarks[LEFT_EAR] = RawLandmark(x=0.5, y=0.3, visibility=0.1)
+        sample = sample_from_landmarks(landmarks)
+        assert sample is not None
+        assert sample.nose_offset_ratio == pytest.approx(0.08 / 0.2)
+
+    def test_nose_not_visible_returns_none(self) -> None:
+        landmarks = _facing()
+        landmarks[NOSE] = RawLandmark(x=0.5, y=0.5, visibility=0.1)
+        assert sample_from_landmarks(landmarks) is None

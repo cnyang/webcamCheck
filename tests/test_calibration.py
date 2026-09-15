@@ -30,20 +30,23 @@ class _FakeEstimator:
         pass
 
 
-def _sample(neck: float, tilt: float, width: float) -> PostureSample:
-    return PostureSample(neck_angle_deg=neck, shoulder_tilt_deg=tilt, shoulder_width=width)
+def _sample(neck: float, tilt: float, width: float, nose_offset: float = 0.0) -> PostureSample:
+    return PostureSample(
+        neck_angle_deg=neck, shoulder_tilt_deg=tilt, shoulder_width=width, nose_offset_ratio=nose_offset
+    )
 
 
 def test_calibrate_averages_detected_samples(monkeypatch: pytest.MonkeyPatch) -> None:
     ticks = iter([0.0, 1.0, 2.0, 6.0])  # 最後一個 tick 超過 5 秒期限,迴圈結束
     monkeypatch.setattr(time, "monotonic", lambda: next(ticks))
 
-    samples = [_sample(10.0, 2.0, 0.40), _sample(20.0, 4.0, 0.60)]
+    samples = [_sample(10.0, 2.0, 0.40, nose_offset=0.02), _sample(20.0, 4.0, 0.60, nose_offset=0.04)]
     baseline = calibrate(_FakeCamera(), _FakeEstimator(samples), duration_seconds=5.0, sleep_fn=lambda _: None)
 
     assert baseline.neck_angle_deg == pytest.approx(15.0)
     assert baseline.shoulder_tilt_deg == pytest.approx(3.0)
     assert baseline.shoulder_width == pytest.approx(0.50)
+    assert baseline.nose_offset_ratio == pytest.approx(0.03)
 
 
 def test_calibrate_raises_when_nothing_detected(monkeypatch: pytest.MonkeyPatch) -> None:

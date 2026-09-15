@@ -137,6 +137,10 @@ def _draw_readout(
         lines.append(f"shoulder tilt {sample.shoulder_tilt_deg:5.1f}deg")
         # 同一個比例兩個意思:掉太多 = 轉身,漲太多 = 上身前傾靠太近
         lines.append(f"shoulder width {ratio:.0%} of calibrated")
+        nose_delta = sample.nose_offset_ratio - baseline.nose_offset_ratio
+        lines.append(
+            f"nose offset {sample.nose_offset_ratio:.3f}  (base {baseline.nose_offset_ratio:.3f}, {nose_delta:+.3f})"
+        )
         if verdict.too_close:
             lines.append("TOO CLOSE - sit back")
         if not _elbows_visible(landmarks):

@@ -4,10 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from webcamcheck.geometry import Point, ear_shoulder_angle, shoulder_tilt_angle, shoulder_width
+from webcamcheck.geometry import (
+    Point,
+    ear_shoulder_angle,
+    nose_shoulder_offset_ratio,
+    shoulder_tilt_angle,
+    shoulder_width,
+)
 from webcamcheck.posture import PostureSample
 
 # BlazePose 33 點拓樸中固定的索引。
+NOSE = 0
 LEFT_EAR = 7
 RIGHT_EAR = 8
 LEFT_SHOULDER = 11
@@ -36,7 +43,8 @@ def sample_from_landmarks(landmarks: list[RawLandmark], aspect_ratio: float = 1.
         landmark = landmarks[index]
         return Point(x=landmark.x, y=landmark.y)
 
-    if not (visible(LEFT_SHOULDER) and visible(RIGHT_SHOULDER)):
+    # 鼻子拿來算轉頭幅度(擋掉「轉頭看旁邊螢幕」被誤判成低頭),沒偵測到鼻子代表這幀不可靠。
+    if not (visible(LEFT_SHOULDER) and visible(RIGHT_SHOULDER) and visible(NOSE)):
         return None
 
     left_shoulder = point(LEFT_SHOULDER)
@@ -45,6 +53,7 @@ def sample_from_landmarks(landmarks: list[RawLandmark], aspect_ratio: float = 1.
         x=(left_shoulder.x + right_shoulder.x) / 2,
         y=(left_shoulder.y + right_shoulder.y) / 2,
     )
+    width = shoulder_width(left_shoulder, right_shoulder, aspect_ratio)
 
     ear_angles = [
         ear_shoulder_angle(point(index), shoulder_mid, aspect_ratio)
@@ -57,5 +66,6 @@ def sample_from_landmarks(landmarks: list[RawLandmark], aspect_ratio: float = 1.
     return PostureSample(
         neck_angle_deg=sum(ear_angles) / len(ear_angles),
         shoulder_tilt_deg=shoulder_tilt_angle(left_shoulder, right_shoulder, aspect_ratio),
-        shoulder_width=shoulder_width(left_shoulder, right_shoulder, aspect_ratio),
+        shoulder_width=width,
+        nose_offset_ratio=nose_shoulder_offset_ratio(point(NOSE), shoulder_mid, width, aspect_ratio),
     )

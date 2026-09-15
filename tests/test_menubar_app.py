@@ -53,6 +53,10 @@ class _StubController:
         self.settings.near_ratio = ratio
         self.applied.append(("near", ratio))
 
+    def set_yaw_tolerance(self, tolerance: float) -> None:
+        self.settings.yaw_tolerance = tolerance
+        self.applied.append(("yaw", tolerance))
+
     def tick(self) -> UiState:
         self.ticks += 1
         return self.ui
