@@ -84,7 +84,8 @@ class _StubController:
 def quiet_rumps(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """通知和離開都攔下來:測試不該真的跳通知,更不該把 process 關掉。"""
     sent: list[str] = []
-    monkeypatch.setattr(rumps, "notification", lambda title, subtitle, message, **kw: sent.append(message))
+    # 不用 rumps.notification:它要 Info.plist,從 venv 的 python 啟動時會直接丟 RuntimeError。
+    monkeypatch.setattr("webcamcheck.menubar.notify", lambda title, message, **kw: sent.append(message))
     monkeypatch.setattr(rumps, "quit_application", lambda *args: None)
     return sent
 
@@ -149,6 +150,30 @@ class TestMenuActions:
         assert controller.calibrations == 1
         assert started == [controller.run_calibration], "校準會擋住,不能跑在主執行緒上"
         assert quiet_rumps, "應該提示使用者坐正"
+
+    def test_calibration_thread_starts_even_if_notification_blows_up(self, quiet_rumps: list[str]) -> None:
+        """回歸:通知丟例外曾讓執行緒沒起來,busy 永遠清不掉,圖示卡在 ⏳。"""
+        controller = _StubController()
+        started: list[Any] = []
+
+        class _FakeThread:
+            def __init__(self, target: Any, daemon: bool = False) -> None:
+                self.target = target
+
+            def start(self) -> None:
+                started.append(self.target)
+
+        def _boom(*args: Any, **kwargs: Any) -> None:
+            raise RuntimeError("notification center unavailable")
+
+        app = _app(controller)
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr("webcamcheck.menubar.threading.Thread", _FakeThread)
+            patch.setattr("webcamcheck.menubar.notify", _boom)
+            with pytest.raises(RuntimeError):
+                app._start_calibration(app._pause_item)
+
+        assert started == [controller.run_calibration]
 
     def test_calibration_click_is_ignored_while_busy(self, quiet_rumps: list[str]) -> None:
         controller = _StubController(UiState(busy=True))

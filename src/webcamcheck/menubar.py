@@ -19,6 +19,7 @@ from collections.abc import Callable
 import rumps
 
 from webcamcheck.controller import MenuBarController, MenuBarSettings, UiState
+from webcamcheck.notifier import notify
 from webcamcheck.posture import PostureStatus
 from webcamcheck.schedule import DEFAULT_WINDOWS, describe
 
@@ -185,8 +186,10 @@ class PostureApp(rumps.App):  # type: ignore[misc]  # rumps 沒有型別標註,s
         if not self._controller.begin_calibration():
             return
         self._render()
-        rumps.notification("webcamcheck", "開始校準", f"坐正,維持 {self._controller.settings.calibrate_seconds:.0f} 秒")
+        # 執行緒要先起:busy 已經設成 True,只有 run_calibration 的 finally 會清掉它。
+        # 通知若在前面炸掉,執行緒永遠起不來,圖示就卡在 ⏳ 再也不會恢復。
         threading.Thread(target=self._controller.run_calibration, daemon=True).start()
+        notify("開始校準", f"坐正,維持 {self._controller.settings.calibrate_seconds:.0f} 秒", sound_name=None)
 
     def _open_view(self, _item: rumps.MenuItem) -> None:
         subprocess.Popen(view_command(self._controller.settings))
@@ -198,7 +201,7 @@ class PostureApp(rumps.App):  # type: ignore[misc]  # rumps 沒有型別標註,s
     def _tick(self, _timer: rumps.Timer) -> None:
         notice = self._controller.take_pending_notice()
         if notice:
-            rumps.notification("webcamcheck", "", notice)
+            notify("webcamcheck", notice, sound_name=None)
         self._controller.tick()
         self._render()
 
